@@ -1,0 +1,17 @@
+# Environment variables
+
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# UV package manager
+uv.lock
+.python-version
+
+# Virtual environments
+.venv/
+venv/
+env/
+*.lock

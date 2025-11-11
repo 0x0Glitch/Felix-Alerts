@@ -1,0 +1,58 @@
+{
+  "database": {
+    "market_data_schema": "market_data",
+    "user_positions_schema": "user_positions",
+    "market_data_table": "flxn_tsla_data",
+    "positions_table": "flxn_tsla_positions"
+  },
+  "api": {
+    "dex": "flxn"
+  },
+  "symbols": {
+    "primary_coin": "flxn:TSLA",
+    "allowed_liquidation_coins": ["flxn:TSLA"]
+  },
+  "deviation_oracle_price": {
+    "check_interval_seconds": 3,
+    "threshold_percent": 0.5
+  },
+  "funding_rate": {
+    "check_interval_seconds": 3600,
+    "threshold": 25
+  },
+  "oi_oicap": {
+    "check_interval_seconds": 10800,
+    "threshold_percent": 0.85
+  },
+  "depth": {
+    "check_interval_seconds": 300,
+    "threshold_percent": 0.2
+  },
+  "impact_price_difference": {
+    "check_interval_seconds": 300,
+    "threshold_percent": 3
+  },
+  "liquidation_alert": {
+    "check_interval_seconds": 300,
+    "min_position_value": 50000,
+    "max_leverage": 5,
+    "margin_threshold_multiplier": 1.10
+  },
+  "big_position": {
+    "threshold": 10000,
+    "ping_interval_seconds": 21,
+    "reconnect_base_delay": 1.0,
+    "reconnect_max_delay": 15.0,
+    "max_trade_age_seconds": 20
+  },
+  "big_liquidation": {
+    "usd_threshold": 5000,
+    "read_existing_at_start": false,
+    "read_new_files_from_start": true
+  },
+  "stale_oracle_alerts": {
+    "threshold_seconds": 1.0,
+    "read_existing_at_start": false,
+    "read_new_files_from_start": true
+  }
+}

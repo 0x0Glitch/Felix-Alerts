@@ -1,0 +1,129 @@
+# https://taskfile.dev
+version: '3'
+
+vars:
+  SCRIPT_DIR: "/home/glitch/Desktop/anthias/Felix-Monitoring"
+  SCRIPT_MODULE: "oi_oicap"
+  USER_NAME: "glitch"
+  SERVICE_NAME: "oi_oicap_worker"
+  SERVICE_FILE: "/etc/systemd/system/{{.SERVICE_NAME}}.service"
+  VENV_PATH: "{{.SCRIPT_DIR}}/.venv"
+
+tasks:
+  default:
+    desc: "Show available tasks"
+    cmds:
+      - task --list
+
+  setup-script:
+    desc: "Ensure the script is executable and has a shebang (optional now)"
+    cmds:
+      - echo "✅ Script setup skipped — module-based execution used."
+
+  create-service:
+    desc: "Create systemd service file"
+    cmds:
+      - |
+        echo "Creating systemd service: {{.SERVICE_NAME}}"
+        sudo bash -c "cat > {{.SERVICE_FILE}}" <<EOF
+        [Unit]
+        Description=Liquidity Monitor Script for Hyperswap v3
+        After=network.target
+
+        [Service]
+        Type=simple
+        WorkingDirectory={{.SCRIPT_DIR}}
+        ExecStart={{.VENV_PATH}}/bin/python {{.SCRIPT_DIR}}/oi_oicap.py
+        User={{.USER_NAME}}
+        Restart=always
+        RestartSec=5
+        Environment=PYTHONUNBUFFERED=1
+        StandardOutput=journal
+        StandardError=journal
+
+        [Install]
+        WantedBy=multi-user.target
+        EOF
+        echo "✅ Service file created at {{.SERVICE_FILE}}"
+
+
+  install:
+    desc: "Install and start the worker service"
+    deps: [setup-script, create-service]
+    cmds:
+      - sudo systemctl daemon-reexec
+      - sudo systemctl daemon-reload
+      - sudo systemctl enable "{{.SERVICE_NAME}}"
+      - sudo systemctl restart "{{.SERVICE_NAME}}"
+      - echo "✅ Service '{{.SERVICE_NAME}}' installed and started"
+
+  start:
+    desc: "Start the worker service"
+    cmds:
+      - sudo systemctl start "{{.SERVICE_NAME}}"
+      - echo "✅ Service '{{.SERVICE_NAME}}' started"
+
+  stop:
+    desc: "Stop the worker service"
+    cmds:
+      - sudo systemctl stop "{{.SERVICE_NAME}}"
+      - echo "✅ Service '{{.SERVICE_NAME}}' stopped"
+
+  restart:
+    desc: "Restart the worker service"
+    cmds:
+      - sudo systemctl restart "{{.SERVICE_NAME}}"
+      - echo "✅ Service '{{.SERVICE_NAME}}' restarted"
+
+  status:
+    desc: "Check service status"
+    cmds:
+      - sudo systemctl status "{{.SERVICE_NAME}}" --no-pager
+
+  logs:
+    desc: "View service logs (follow mode)"
+    cmds:
+      - journalctl -u "{{.SERVICE_NAME}}" -f
+
+  logs-tail:
+    desc: "View last 50 lines of service logs"
+    cmds:
+      - journalctl -u "{{.SERVICE_NAME}}" -n 50 --no-pager
+
+  uninstall:
+    desc: "Stop, disable and remove the service"
+    cmds:
+      - sudo systemctl stop "{{.SERVICE_NAME}}" || true
+      - sudo systemctl disable "{{.SERVICE_NAME}}" || true
+      - sudo rm -f "{{.SERVICE_FILE}}"
+      - sudo systemctl daemon-reload
+      - echo "✅ Service '{{.SERVICE_NAME}}' uninstalled"
+
+  reload:
+    desc: "Reload systemd and restart service (useful after script changes)"
+    cmds:
+      - sudo systemctl daemon-reload
+      - sudo systemctl restart "{{.SERVICE_NAME}}"
+      - echo "✅ Service '{{.SERVICE_NAME}}' reloaded and restarted"
+
+  enable:
+    desc: "Enable service to start on boot"
+    cmds:
+      - sudo systemctl enable "{{.SERVICE_NAME}}"
+      - echo "✅ Service '{{.SERVICE_NAME}}' enabled for startup"
+
+  disable:
+    desc: "Disable service from starting on boot"
+    cmds:
+      - sudo systemctl disable "{{.SERVICE_NAME}}"
+      - echo "✅ Service '{{.SERVICE_NAME}}' disabled from startup"
+
+  check-script:
+    desc: "Check if the Python module exists (just checks path)"
+    cmds:
+      - |
+        if [ -d "{{.SCRIPT_DIR}}/indexer" ]; then
+          echo "✅ indexer module found"
+        else
+          echo "❌ indexer module not found in {{.SCRIPT_DIR}}"
+        fi
