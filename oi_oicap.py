@@ -92,11 +92,11 @@ def compare_once():
             return
         
         universe = resp_meta[0].get("universe") if isinstance(resp_meta[0], dict) else None
-        coin_index = find_coin_index(universe, COIN_PART)
+        coin_index = find_coin_index(universe, COIN_SYMBOL)
         
         if coin_index is None:
-            print(f"Coin {COIN_PART} not found in universe")
-            send_developer_alert(f"oi_oicap.py: Coin {COIN_PART} not found in universe")
+            print(f"Coin {COIN_SYMBOL} not found in universe")
+            send_developer_alert(f"oi_oicap.py: Coin {COIN_SYMBOL} not found in universe")
             return
         
         if not isinstance(resp_meta[1], list) or len(resp_meta[1]) <= coin_index:
@@ -123,10 +123,10 @@ def compare_once():
 
     try:
         coin_caps = dict(resp_limits["coinToOiCap"])
-        coin_to_oi_cap_value = coin_caps.get(SYMBOL)
+        coin_to_oi_cap_value = coin_caps.get(COIN_SYMBOL)
         if coin_to_oi_cap_value is None:
-            print(f"Symbol '{SYMBOL}' not found in coinToOiCap")
-            send_developer_alert(f"oi_oicap.py: Symbol '{SYMBOL}' not found in coinToOiCap")
+            print(f"Symbol '{COIN_SYMBOL}' not found in coinToOiCap")
+            send_developer_alert(f"oi_oicap.py: Symbol '{COIN_SYMBOL}' not found in coinToOiCap")
             return
         coin_to_oi_cap = float(coin_to_oi_cap_value)
     except Exception as e:
@@ -139,13 +139,13 @@ def compare_once():
     threshold = threshold_percent * coin_to_oi_cap
 
     print(f"openInterest = {open_interest}, markPx = {mark_px}, product = {product}")
-    print(f"coinToOiCap({SYMBOL}) = {coin_to_oi_cap}")
+    print(f"coinToOiCap({COIN_SYMBOL}) = {coin_to_oi_cap}")
     print(f"Threshold (85%): {threshold}")
 
     if product > threshold:
         msg = (
             f"ALERT: OI * MarkPx exceeded {threshold_percent*100:.0f}% of cap limit!\n\n"
-            f"Symbol: {SYMBOL}\n"
+            f"Symbol: {COIN_SYMBOL}\n"
             f"Open Interest: {open_interest:.2f}\n"
             f"Mark Price: {mark_px:.2f}\n"
             f"OpenInterest_USD: {product:,.2f}\n"

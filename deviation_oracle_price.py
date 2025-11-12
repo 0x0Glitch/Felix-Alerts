@@ -110,6 +110,10 @@ def check_price_impact():
         oracle_px = float(market_data["oraclePx"])
         impact_pxs = market_data["impactPxs"]
         
+        if impact_pxs is None:
+            print(f"impactPxs is None - market may be inactive or data unavailable")
+            return
+        
         if not isinstance(impact_pxs, list):
             print(f"Invalid impactPxs format (not a list): {type(impact_pxs)}")
             send_developer_alert(f"deviation_oracle_price.py: impactPxs is not a list: {type(impact_pxs)}")

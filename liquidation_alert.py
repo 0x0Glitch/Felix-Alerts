@@ -54,33 +54,8 @@ def check_liquidations():
     try:
         conn = psycopg2.connect(DATABASE_URL)
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute('''
-                SELECT markpx, timestamp
-                FROM {MARKET_SCHEMA}.{MARKET_DATA_TABLE}
-                WHERE markpx IS NOT NULL
-                ORDER BY timestamp DESC
-                LIMIT 1;
-            ''')
-            price_row = cur.fetchone()
-            
-            if price_row:
-                mark_px = float(price_row['markpx'])
-                timestamp = price_row['timestamp']
-                timestamp_dt = datetime.fromtimestamp(timestamp / 1000)
-                
-                if mark_px == 0:
-                    msg = (
-                        f"ALERT: Public API Failure Detected!\n"
-                        f"Mark price is 0 at {timestamp_dt}\n"
-                        f"Please check the data feed."
-                    )
-                    print(msg)
-                    send_developer_alert(msg)
-                    return
-                
-                print(f"Current mark price: ${mark_px:.2f} at {timestamp_dt}")
-            
-            cur.execute('''
+            # Query positions from flxn_tsla_positions table
+            cur.execute(f'''
                 SELECT 
                     address,
                     market,
@@ -93,13 +68,17 @@ def check_liquidations():
                     return_on_equity,
                     leverage_type,
                     leverage_value,
+                    leverage_raw_usd,
                     account_value,
+                    total_margin_used,
+                    withdrawable,
                     last_updated
-                FROM {POSITIONS_SCHEMA}.{POSITIONS_TABLE}
+                FROM user_positions.flxn_tsla_positions
                 WHERE position_value IS NOT NULL 
+                  AND position_size IS NOT NULL
+                  AND position_size != 0
+                  AND liquidation_price IS NOT NULL
                   AND ABS(position_value) >= %s
-                  AND margin_used IS NOT NULL
-                  AND unrealized_pnl IS NOT NULL
                 ORDER BY ABS(position_value) DESC;
             ''', (MIN_POSITION_VALUE,))
             
@@ -114,27 +93,39 @@ def check_liquidations():
             alerts = []
             for position in positions:
                 address = position['address']
-                position_size = float(position['position_size']) if position['position_size'] else 0
+                position_size = float(position['position_size'])
                 position_value = float(position['position_value'])
-                margin_used = float(position['margin_used'])
-                unrealized_pnl = float(position['unrealized_pnl'])
-                leverage_value = position['leverage_value']
-                liquidation_price = float(position['liquidation_price']) if position['liquidation_price'] else 0
+                liquidation_price = float(position['liquidation_price'])
                 
-                maintenance_margin = abs(position_value) / (MAX_LEVERAGE * 2)
-                threshold = MARGIN_THRESHOLD_MULTIPLIER * maintenance_margin
-                effective_margin = margin_used + unrealized_pnl
+                # Calculate mark price from position_value / position_size
+                mark_px = abs(position_value / position_size) if position_size != 0 else 0
                 
-                if effective_margin <= threshold:
-                    margin_utilization = (effective_margin / maintenance_margin) * 100 if maintenance_margin > 0 else 0
+                if mark_px == 0:
+                    print(f"Warning: Invalid mark price for address {address[:6]}...{address[-4:]}")
+                    continue
+                
+                # Calculate distance to liquidation price as percentage
+                distance_to_liquidation = abs(mark_px - liquidation_price) / mark_px
+                
+                # Alert if within 10% of liquidation price
+                if distance_to_liquidation <= 0.1:
+                    distance_percentage = distance_to_liquidation * 100
+                    
+                    # Get additional position details
+                    margin_used = float(position['margin_used']) if position['margin_used'] else 0
+                    unrealized_pnl = float(position['unrealized_pnl']) if position['unrealized_pnl'] else 0
+                    leverage_value = position['leverage_value']
+                    entry_price = float(position['entry_price']) if position['entry_price'] else 0
                     
                     alert_msg = (
                         f"LIQUIDATION WARNING!\n"
-                        f"Address: {address[:6]}...{address[-4:]}\n"
+                        f"Address: {address}\n"
                         f"Position Value: ${abs(position_value):,.2f}\n"
+                        f"Mark Price: ${mark_px:.2f}\n"
+                        f"Liquidation Price: ${liquidation_price:.2f}\n"
+                        f"Distance to Liquidation: {distance_percentage:.2f}%\n"
                         f"Leverage: {leverage_value}x\n"
-                        f"Unrealized PnL: ${unrealized_pnl:+,.2f}\n"
-                        f"Liquidation Price: ${liquidation_price:.2f}"
+                        f"Unrealized PnL: ${unrealized_pnl:+,.2f}"
                     )
                     
                     alerts.append(alert_msg)
@@ -143,8 +134,7 @@ def check_liquidations():
             if alerts:
                 header = (
                     f"{len(alerts)} POSITION(S) APPROACHING LIQUIDATION\n"
-                    f"Timestamp: {datetime.now()}\n"
-                    f"═══════════════════════════════\n\n"
+                    f"Timestamp: {datetime.now()}\n\n"
                 )
                 full_msg = header + "\n".join(alerts)
                 send_telegram_alert(full_msg)
@@ -154,8 +144,7 @@ def check_liquidations():
             print(f"\n--- Summary ---")
             print(f"Total positions monitored: {len(positions)}")
             print(f"Positions at risk: {len(alerts)}")
-            print(f"Max leverage: {MAX_LEVERAGE}x")
-            print(f"Threshold multiplier: {MARGIN_THRESHOLD_MULTIPLIER}x")
+            print(f"Alert threshold: 10% distance to liquidation")
             print(f"Check completed at {datetime.now()}\n")
             
     except psycopg2.Error as e:
@@ -171,10 +160,10 @@ def check_liquidations():
 if __name__ == "__main__":
     print("Starting liquidation monitoring...")
     print(f"Monitoring positions >= ${MIN_POSITION_VALUE:,}")
-    print(f"Max leverage: {MAX_LEVERAGE}x")
-    print(f"Alert threshold: {MARGIN_THRESHOLD_MULTIPLIER}x maintenance margin")
-    print(f"Maintenance margin formula: position_value / (max_leverage * 2)")
-    print(f"Alert condition: margin_used + unrealized_pnl <= {MARGIN_THRESHOLD_MULTIPLIER} * maintenance_margin")
+    print(f"Table: user_positions.flxn_tsla_positions")
+    print(f"Alert condition: abs(mark_price - liquidation_price) / mark_price <= 0.1")
+    print(f"Mark price formula: position_value / position_size")
+    print(f"Alert triggers when position is within 10% of liquidation price")
     print(f"Check interval: {CHECK_INTERVAL} seconds\n")
     
     while True:

@@ -47,6 +47,9 @@ def send_developer_alert(message: str):
         print("Failed to send developer alert:", e)
 
 def monitor_liquidity_depth():
+    # Rate limiting for 5bps alerts: max 2 per hour
+    alert_5bps_timestamps = []
+    
     try:
         conn = psycopg2.connect(DATABASE_URL)
         print("Connected to Postgres successfully.\n")
@@ -107,8 +110,20 @@ def monitor_liquidity_depth():
                 print(f"100bps Depth: Latest = {latest_depth_100bps}, 1h Avg = {avg_depth_100bps:.2f}\n")
 
                 alerts = []
+                
+                # Check 5bps alert with rate limiting (max 2 per hour)
                 if latest_depth_5bps < DEPTH_THRESHOLD_PERCENT * avg_depth_5bps:
-                    alerts.append(f"5bps depth dropped below {DEPTH_THRESHOLD_PERCENT*100:.0f}% of last 1h avg")
+                    current_time = datetime.now()
+                    # Remove timestamps older than 1 hour
+                    alert_5bps_timestamps[:] = [ts for ts in alert_5bps_timestamps 
+                                                 if current_time - ts < timedelta(hours=1)]
+                    
+                    if len(alert_5bps_timestamps) < 2:
+                        alerts.append(f"5bps depth dropped below {DEPTH_THRESHOLD_PERCENT*100:.0f}% of last 1h avg")
+                        alert_5bps_timestamps.append(current_time)
+                    else:
+                        print(f"  5bps alert suppressed (rate limit: 2 per hour). Last alerts: {alert_5bps_timestamps}")
+                
                 if latest_depth_10bps < DEPTH_THRESHOLD_PERCENT * avg_depth_10bps:
                     alerts.append(f"10bps depth dropped below {DEPTH_THRESHOLD_PERCENT*100:.0f}% of last 1h avg")
                 if latest_depth_50bps < DEPTH_THRESHOLD_PERCENT * avg_depth_50bps:
